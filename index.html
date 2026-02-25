@@ -3,17 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>孤独的公路 - 最终版</title>
+    <title>孤独的公路 - 最终修复版</title>
     <style>
-        /* 基础页面样式 */
         body { margin: 0; background: #d4a373; overflow: hidden; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; font-family: 'Courier New', monospace; touch-action: none; }
-        #game-container { position: relative; border: 8px solid #3e2723; background: #a2d2ff; }
-        canvas { display: block; max-width: 100vw; max-height: 80vh; }
-        
-        /* UI 界面样式 */
+        #game-container { position: relative; border: 8px solid #3e2723; background: #a2d2ff; width: 600px; height: 500px; max-width: 100vw; max-height: 80vh; }
+        canvas { display: block; width: 100%; height: 100%; }
         #ui { position: absolute; top: 10px; width: 100%; display: flex; justify-content: space-around; color: #fff; text-shadow: 2px 2px 0px #000; font-size: 18px; pointer-events: none; z-index: 10; }
         .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; color: white; text-align: center; }
-        button { padding: 12px 35px; font-size: 20px; cursor: pointer; background: #795548; color: white; border: none; margin-top: 20px; font-family: inherit; }
+        /* 确保按钮足够大，方便点击 */
+        #startBtn { padding: 20px 50px; font-size: 28px; cursor: pointer; background: #795548; color: white; border: none; border-radius: 5px; box-shadow: 0 5px 0 #3e2723; }
+        #startBtn:active { transform: translateY(3px); box-shadow: 0 2px 0 #3e2723; }
     </style>
 </head>
 <body>
@@ -27,9 +26,127 @@
     <canvas id="gameCanvas" width="600" height="500"></canvas>
 
     <div id="startScreen" class="screen">
-        <h1>孤独的公路</h1>
-        <p>电脑：左右方向键控制<br>手机：点击屏幕左右两侧控制</p>
-        <button onclick="startGame()">开始驾驶</button>
+        <h1 style="font-size: 40px; margin-bottom: 10px;">孤独的公路</h1>
+        <p style="color: #aaa; margin-bottom: 30px;">电脑：左右键 | 手机：点屏幕两侧</p>
+        <button id="startBtn">开始驾驶</button>
     </div>
 
-    <div id="deathScreen" class="screen" style
+    <div id="deathScreen" class="screen" style="display: none;">
+        <h1 id="deathMessage">GAME OVER</h1>
+        <button onclick="location.reload()" style="padding: 10px 30px;">重新挑战</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const startBtn = document.getElementById('startBtn');
+    
+    let currentLevel = 1, timeLeft = 60, isGameOver = false, isStarted = false;
+    let carX = 300, roadOffset = 0, hillY = 250, keys = {};
+
+    // 绑定开始按钮逻辑
+    startBtn.onclick = function(e) {
+        e.stopPropagation(); // 防止点击穿透
+        isStarted = true;
+        document.getElementById('startScreen').style.display = 'none';
+        runTimer();
+    };
+
+    // 电脑按键
+    window.onkeydown = e => keys[e.key] = true;
+    window.onkeyup = e => keys[e.key] = false;
+
+    // 手机触摸逻辑：直接监听 canvas
+    canvas.addEventListener('touchstart', e => {
+        if(!isStarted) return;
+        let rect = canvas.getBoundingClientRect();
+        let touchX = e.touches[0].clientX - rect.left;
+        let ratio = canvas.width / rect.width;
+        if ((touchX * ratio) < canvas.width / 2) keys["ArrowLeft"] = true;
+        else keys["ArrowRight"] = true;
+    }, {passive: false});
+
+    window.addEventListener('touchend', () => { 
+        keys["ArrowLeft"] = false; 
+        keys["ArrowRight"] = false; 
+    });
+
+    function drawCar(x, y) {
+        let shake = isStarted ? Math.sin(Date.now() / 30) * 1.5 : 0;
+        let fy = y + shake;
+        ctx.fillStyle = "rgba(0,0,0,0.15)";
+        ctx.beginPath(); ctx.ellipse(x+25, fy+45, 32, 8, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = "#5d4037"; ctx.fillRect(x, fy+10, 50, 30); // 主体
+        ctx.fillStyle = "#795548"; ctx.fillRect(x+6, fy, 38, 15); // 车顶
+        ctx.fillStyle = "#212121"; ctx.fillRect(x+10, fy+4, 30, 8); // 窗
+        ctx.fillStyle = "#d32f2f"; ctx.fillRect(x+4, fy+15, 8, 5); // 左灯
+        ctx.fillRect(x+38, fy+15, 8, 5); // 右灯
+    }
+
+    function loop() {
+        ctx.fillStyle = "#a2d2ff"; ctx.fillRect(0, 0, 600, 500); // 天空
+        ctx.fillStyle = "#e6ccb2"; ctx.fillRect(0, hillY, 600, 500-hillY); // 沙漠
+
+        if (isStarted && !isGameOver) {
+            let roadCenter = 300;
+            if(currentLevel === 2) roadCenter += Math.sin(Date.now()/1000)*120;
+            if(currentLevel === 3) {
+                roadCenter += Math.cos(Date.now()/1200)*150;
+                hillY = 250 + Math.sin(Date.now()/800)*40;
+            }
+
+            // 绘制公路
+            ctx.fillStyle = "#333";
+            ctx.beginPath();
+            ctx.moveTo(roadCenter - 20, hillY); ctx.lineTo(roadCenter + 20, hillY);
+            ctx.lineTo(carX + 450, 500); ctx.lineTo(carX - 350, 500);
+            ctx.fill();
+
+            // 绘制中线
+            roadOffset += 16;
+            ctx.strokeStyle = "#fff"; ctx.setLineDash([35, 45]);
+            ctx.lineDashOffset = -roadOffset;
+            ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(roadCenter, hillY); ctx.lineTo(300, 500); ctx.stroke();
+
+            // 控制与判定
+            if(keys["ArrowLeft"] || keys["a"]) carX -= 7.5;
+            if(keys["ArrowRight"] || keys["d"]) carX += 7.5;
+            if(currentLevel === 1) carX += Math.sin(Date.now()/500)*0.75;
+
+            // 边缘判定：路面中心 +/- 偏移量
+            if(Math.abs(carX - roadCenter) > 205) {
+                isGameOver = true;
+                document.getElementById('deathScreen').style.display = 'flex';
+                let msgs = ["", "GAME OVER", "OUT", "LOST"];
+                document.getElementById('deathMessage').innerText = msgs[currentLevel];
+            }
+        }
+
+        drawCar(275, 410);
+        requestAnimationFrame(loop);
+    }
+
+    function runTimer() {
+        const itv = setInterval(() => {
+            if(isGameOver) return clearInterval(itv);
+            timeLeft--;
+            document.getElementById('timer').innerText = timeLeft;
+            if(timeLeft <= 0) {
+                if(currentLevel < 3) {
+                    currentLevel++;
+                    document.getElementById('lvlName').innerText = currentLevel;
+                    timeLeft = currentLevel === 2 ? 120 : 180;
+                } else {
+                    alert("旅程终点：你穿越了孤独。");
+                    location.reload();
+                }
+            }
+        }, 1000);
+    }
+
+    loop();
+</script>
+</body>
+</html>
